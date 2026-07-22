@@ -5,6 +5,7 @@ let disableSynchronizationKey: String = "disableSynchronization";
 let firstElementTopMarginKey: String = "firstElementTopMargin";
 let lastElementBottomMarginKey: String = "lastElementBottomMargin";
 let preventMOColumnBreaksKey: String = "preventMOColumnBreaks";
+let autoAdvanceChaptersKey: String = "autoAdvanceChapters";
 
 let topMarginCssVariable = "--FLUTTER_READIUM-first-element-top-margin"
 let bottomMarginCssVariable = "--FLUTTER_READIUM-last-element-bottom-margin";
@@ -27,7 +28,10 @@ public struct FlutterEPUBPreferences {
   /// When true (default), prevents paragraph elements from splitting across CSS columns during
   /// media-overlay playback. Nil means the Dart-side default (true) applies.
   public var preventMOColumnBreaks: Bool?
-  
+  /// When true and scroll is also enabled, automatically advances to the next/previous
+  /// chapter when scrolling reaches the end/start of the current resource.
+  public var autoAdvanceChapters: Bool?
+
   init() {
     readium = EPUBPreferences.init();
   }
@@ -54,6 +58,10 @@ public struct FlutterEPUBPreferences {
     if let preventMOColumnBreaks = jsonMap[preventMOColumnBreaksKey] as? Bool {
       self.preventMOColumnBreaks = preventMOColumnBreaks
       mutableMap.removeValue(forKey: preventMOColumnBreaksKey);
+    }
+    if let autoAdvanceChapters = jsonMap[autoAdvanceChaptersKey] as? Bool {
+      self.autoAdvanceChapters = autoAdvanceChapters
+      mutableMap.removeValue(forKey: autoAdvanceChaptersKey);
     }
 
     readium = EPUBPreferences.init(fromMap: mutableMap)

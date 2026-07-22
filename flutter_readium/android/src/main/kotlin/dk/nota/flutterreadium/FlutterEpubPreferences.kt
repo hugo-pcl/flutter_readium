@@ -52,6 +52,7 @@ data class FlutterEpubPreferences(
     val firstElementTopMargin: Int? = null,
     val lastElementBottomMargin: Int? = null,
     val preventMOColumnBreaks: Boolean? = true,
+    val autoAdvanceChapters: Boolean? = null,
 ) : Configurable.Preferences<FlutterEpubPreferences> {
     override fun plus(other: FlutterEpubPreferences): FlutterEpubPreferences =
         FlutterEpubPreferences(
@@ -85,6 +86,7 @@ data class FlutterEpubPreferences(
             firstElementTopMargin = other.firstElementTopMargin ?: firstElementTopMargin,
             lastElementBottomMargin = other.lastElementBottomMargin ?: lastElementBottomMargin,
             preventMOColumnBreaks = other.preventMOColumnBreaks ?: preventMOColumnBreaks,
+            autoAdvanceChapters = other.autoAdvanceChapters ?: autoAdvanceChapters,
         )
 
     fun toEpubPreferences(): EpubPreferences =

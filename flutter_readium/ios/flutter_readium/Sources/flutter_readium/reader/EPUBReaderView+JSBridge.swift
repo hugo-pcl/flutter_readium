@@ -220,9 +220,14 @@ extension EPUBReaderView {
           var _thresholdPx = 50;
           function updateScrollState() {
               var st = window.scrollY || window.pageYOffset || document.documentElement.scrollTop || 0;
-              var maxScroll = Math.max(1, document.documentElement.scrollHeight - document.documentElement.clientHeight);
-              _nearBottom = (st >= maxScroll - _thresholdPx);
-              _nearTop = (_thresholdPx >= st);
+              var maxScroll = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+              if ((1 >= maxScroll)) {
+                  _nearBottom = false;
+                  _nearTop = false;
+              } else {
+                  _nearBottom = (st >= maxScroll - _thresholdPx);
+                  _nearTop = (_thresholdPx >= st);
+              }
           }
           window.addEventListener('scroll', updateScrollState, { passive: true });
           // Seed the state immediately — a resource that opens already scrolled to an

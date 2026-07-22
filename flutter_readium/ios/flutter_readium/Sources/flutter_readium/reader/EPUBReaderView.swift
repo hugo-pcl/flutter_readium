@@ -427,7 +427,7 @@ public class EPUBReaderView: NSObject, FlutterPlatformView, ReadiumReaderView, E
       guard nearBottom || nearTop else { return }
 
       let presentationScroll = await MainActor.run { self.readiumViewController.presentation.scroll }
-      guard presentationScroll, !Task.isCancelled else { return }
+      guard presentationScroll, preferences?.autoAdvanceChapters == true, !Task.isCancelled else { return }
 
       // Atomic test-and-set on MainActor so two overlapping tasks can't both pass the
       // cooldown check and both trigger a chapter advance.

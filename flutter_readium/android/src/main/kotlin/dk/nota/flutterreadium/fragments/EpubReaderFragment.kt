@@ -83,6 +83,7 @@ class EpubReaderFragment :
         get() = epubNavigator?.settings?.value?.scroll == true
 
     private var autoAdvanceCooldown = false
+    private var autoAdvanceChapters: Boolean? = null
 
     val layoutMode: Layout
         get() =
@@ -122,7 +123,7 @@ class EpubReaderFragment :
         // Auto-advance: check scroll state on every page change
         // (same approach as iOS locationDidChange). Only check in scroll
         // mode when the cooldown is inactive.
-        if (!scrollMode || autoAdvanceCooldown) return
+        if (!scrollMode || autoAdvanceChapters != true || autoAdvanceCooldown) return
         lifecycleScope.launch {
             try {
                 val jsResult = evaluateJavascript("window.__flutterReadiumScrollState()")
@@ -136,6 +137,7 @@ class EpubReaderFragment :
                             delay(3000)
                             autoAdvanceCooldown = false
                         }
+
                         json.optBoolean("nearTop", false) -> {
                             autoAdvanceCooldown = true
                             PluginLog.d(TAG, "::onPageChanged - AUTO-ADVANCE backward")
@@ -331,6 +333,7 @@ class EpubReaderFragment :
             requireOrLog(TAG, epubVm, "No epubVm available.") ?: return
 
         model.preferences = preferences
+        autoAdvanceChapters = preferences.autoAdvanceChapters
 
         val navigator =
             requireOrLog(TAG, epubNavigator, "Navigator not ready.") ?: return
@@ -702,6 +705,7 @@ class EpubReaderFragment :
 
         val preferences = model.preferences ?: FlutterEpubPreferences()
         model.preferences = preferences
+        autoAdvanceChapters = preferences.autoAdvanceChapters
         val navigatorFactory = model.navigatorFactory!!
 
         val navigatorConfig =

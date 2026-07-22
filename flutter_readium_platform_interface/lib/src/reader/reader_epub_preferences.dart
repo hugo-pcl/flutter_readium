@@ -26,6 +26,7 @@ class EPUBPreferences with Equatable implements JSONable {
     this.publisherStyles,
     this.readingProgression,
     this.scroll,
+    this.autoAdvanceChapters,
     this.spread,
     this.textAlign,
     this.textColor,
@@ -91,6 +92,12 @@ class EPUBPreferences with Equatable implements JSONable {
 
   /// Vertical scroll for reflowable content. Default is false, meaning horizontal pagination.
   final bool? scroll;
+
+  /// When true and [scroll] is also true, automatically advances to the next/previous
+  /// chapter when scrolling reaches the end/start of the current resource. Has no effect
+  /// when [scroll] is false. Default is false/null, meaning swipe horizontally to change
+  /// chapters instead.
+  final bool? autoAdvanceChapters;
 
   /// Indicates if the fixed-layout publication should be rendered with a synthetic spread (dual-page).
   final String? spread;
@@ -222,6 +229,10 @@ class EPUBPreferences with Equatable implements JSONable {
         ? EpubReadingProgression.fromJson(readingProgressionStr)
         : null;
     final scroll = jsonObject.optNullableBoolean('scroll', remove: true);
+    final autoAdvanceChapters = jsonObject.optNullableBoolean(
+      'autoAdvanceChapters',
+      remove: true,
+    );
     final spread = jsonObject.opt('spread', remove: true);
     final textAlign = jsonObject.optEnumFromString(
       'textAlign',
@@ -283,6 +294,7 @@ class EPUBPreferences with Equatable implements JSONable {
       publisherStyles: publisherStyles,
       readingProgression: readingProgression,
       scroll: scroll,
+      autoAdvanceChapters: autoAdvanceChapters,
       spread: spread,
       textAlign: textAlign,
       textColor: textColor,
@@ -318,6 +330,7 @@ class EPUBPreferences with Equatable implements JSONable {
     ..putOpt('publisherStyles', publisherStyles)
     ..putOpt('readingProgression', readingProgression?.toJson())
     ..putOpt('scroll', scroll)
+    ..putOpt('autoAdvanceChapters', autoAdvanceChapters)
     ..putOpt('spread', spread)
     ..putOpt('textAlign', textAlign?.name)
     ..putOpt('textColor', textColor?.toCSS())
@@ -350,6 +363,7 @@ class EPUBPreferences with Equatable implements JSONable {
     bool? publisherStyles,
     EpubReadingProgression? readingProgression,
     bool? scroll,
+    bool? autoAdvanceChapters,
     String? spread,
     TextAlign? textAlign,
     Color? textColor,
@@ -380,6 +394,7 @@ class EPUBPreferences with Equatable implements JSONable {
     publisherStyles: publisherStyles ?? this.publisherStyles,
     readingProgression: readingProgression ?? this.readingProgression,
     scroll: scroll ?? this.scroll,
+    autoAdvanceChapters: autoAdvanceChapters ?? this.autoAdvanceChapters,
     spread: spread ?? this.spread,
     textAlign: textAlign ?? this.textAlign,
     textColor: textColor ?? this.textColor,
@@ -414,6 +429,7 @@ class EPUBPreferences with Equatable implements JSONable {
     publisherStyles,
     readingProgression,
     scroll,
+    autoAdvanceChapters,
     spread,
     textAlign,
     textColor,
