@@ -147,6 +147,12 @@ class ReadiumReaderWidget(
 
         @Suppress("UNUSED_VARIABLE")
         val preloadNextPositionCount = creationParams["preloadNextPositionCount"] as Int?
+
+        @Suppress("UNCHECKED_CAST")
+        val allowedDefaultActionsParam = creationParams["allowedDefaultActions"] as? List<String>
+        if (allowedDefaultActionsParam != null) {
+            ReadiumReader.allowedDefaultActions = allowedDefaultActionsParam
+        }
         val initialLocator =
             if (locatorString == null) null else Locator.fromJSON(jsonDecode(locatorString) as JSONObject)
 

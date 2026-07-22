@@ -214,15 +214,39 @@ extension EPUBReaderView {
 
     let endProgression = viewPort.endProgression
     let nextProgression = viewPort.nextProgression
-    if (nextProgression >= 1.0 && endProgression == 1.0) {
-      // Current progress is already at the top and prevProgression is <= 0.0,
-      // We need to go to the previous file in the readingOrder.
+    // NOTE: was `endProgression == 1.0` — exact equality on a ratio built from three
+    // independently-rounded pixel measurements (see ViewPortSize/FlutterReadiumTools
+    // getViewPortSize) practically never holds, so this branch was effectively dead and
+    // goForwardInScrollMode could never actually leave the current chapter.
+    if (nextProgression >= 1.0 && endProgression >= 1.0) {
+      // We've reached the bottom of the current resource — go to the next file in the
+      // readingOrder.
       Log.reader.debug("at end, use default goForward")
-      return await self.readiumViewController.goForward(options: options)
+      return await self.goToNextChapter(options: options)
     }
 
     Log.reader.debug("goForward from progression:\(currentProgression) to \(nextProgression)")
     locator.locations.progression = clamp(nextProgression, minValue: 0.0, maxValue: 1.0)
     return await self.readiumViewController.go(to: locator, options: options)
+  }
+
+  /// Jumps directly to the next reading-order resource via the underlying navigator.
+  ///
+  /// Used both as the "reached the end" fallback in [goForwardInScrollMode] and directly by
+  /// auto-advance (`navigator(_:locationDidChange:)` in EPUBReaderView.swift), which fires
+  /// when the JS-side scroll listener detects the viewport within ~50px of the bottom —
+  /// short of goForwardInScrollMode's own endProgression gate — so it needs a way to jump
+  /// straight to the next chapter without depending on that viewport math.
+  func goToNextChapter(options: NavigatorGoOptions) async -> Bool {
+    return await self.readiumViewController.goForward(options: options)
+  }
+
+  /// Jumps directly to the previous reading-order resource via the underlying navigator.
+  ///
+  /// Mirrors [goToNextChapter] for the "scrolled near top" auto-advance case in
+  /// `navigator(_:locationDidChange:)` (EPUBReaderView.swift) — same rationale as
+  /// [goToNextChapter]'s doc comment, just the backward direction.
+  func goToPreviousChapter(options: NavigatorGoOptions) async -> Bool {
+    return await self.readiumViewController.goBackward(options: options)
   }
 }

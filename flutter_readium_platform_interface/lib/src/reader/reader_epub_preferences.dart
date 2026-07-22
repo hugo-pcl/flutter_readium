@@ -36,6 +36,7 @@ class EPUBPreferences with Equatable implements JSONable {
     this.blackAndWhiteComicMode = false,
     this.disableSynchronization = false,
     this.firstElementTopMargin,
+    this.lastElementBottomMargin,
     this.preventMOColumnBreaks = true,
   });
 
@@ -134,6 +135,10 @@ class EPUBPreferences with Equatable implements JSONable {
   /// Margin applied to the top of the first element in the content.
   /// This is used to create space for UI elements like a toolbar without overlapping the content.
   final int? firstElementTopMargin;
+
+  /// Margin applied to the bottom of the last element in the content.
+  /// This creates breathing room at the end of the scroll.
+  final int? lastElementBottomMargin;
 
   /// When true (default), prevents paragraph elements from splitting across CSS columns during
   /// media-overlay playback. This ensures audio and visible text stay in sync when a paragraph
@@ -253,6 +258,7 @@ class EPUBPreferences with Equatable implements JSONable {
       'firstElementTopMargin',
       remove: true,
     );
+    final lastElementBottomMargin = jsonObject.optNullableInt('lastElementBottomMargin', remove: true);
     final preventMOColumnBreaks = jsonObject.optBoolean(
       'preventMOColumnBreaks',
       fallback: true,
@@ -288,6 +294,7 @@ class EPUBPreferences with Equatable implements JSONable {
       // ignore: deprecated_member_use_from_same_package
       disableSynchronization: disableSynchronization,
       firstElementTopMargin: firstElementTopMargin,
+      lastElementBottomMargin: lastElementBottomMargin,
       preventMOColumnBreaks: preventMOColumnBreaks,
     );
   }
@@ -322,6 +329,7 @@ class EPUBPreferences with Equatable implements JSONable {
     // ignore: deprecated_member_use_from_same_package
     ..put('disableSynchronization', disableSynchronization)
     ..putOpt('firstElementTopMargin', firstElementTopMargin)
+    ..putOpt('lastElementBottomMargin', lastElementBottomMargin)
     ..put('preventMOColumnBreaks', preventMOColumnBreaks);
 
   EPUBPreferences copyWith({
@@ -352,6 +360,7 @@ class EPUBPreferences with Equatable implements JSONable {
     bool? blackAndWhiteComicMode,
     bool? disableSynchronization,
     int? firstElementTopMargin,
+    int? lastElementBottomMargin,
     bool? preventMOColumnBreaks,
   }) => EPUBPreferences(
     backgroundColor: backgroundColor ?? this.backgroundColor,
@@ -382,6 +391,7 @@ class EPUBPreferences with Equatable implements JSONable {
     // ignore: deprecated_member_use_from_same_package
     disableSynchronization: disableSynchronization ?? this.disableSynchronization,
     firstElementTopMargin: firstElementTopMargin ?? this.firstElementTopMargin,
+    lastElementBottomMargin: lastElementBottomMargin ?? this.lastElementBottomMargin,
     preventMOColumnBreaks: preventMOColumnBreaks ?? this.preventMOColumnBreaks,
   );
 
@@ -415,6 +425,7 @@ class EPUBPreferences with Equatable implements JSONable {
     // ignore: deprecated_member_use_from_same_package
     disableSynchronization,
     firstElementTopMargin,
+    lastElementBottomMargin,
     preventMOColumnBreaks,
   ];
 }

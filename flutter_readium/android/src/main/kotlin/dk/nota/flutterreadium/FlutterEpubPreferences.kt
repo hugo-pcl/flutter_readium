@@ -16,6 +16,7 @@ import org.readium.r2.shared.util.Language
 private const val TAG = "FlutterEpubPreferences"
 
 private const val TOP_MARGIN_CSS_VARIABLE = "--FLUTTER_READIUM-first-element-top-margin"
+private const val BOTTOM_MARGIN_CSS_VARIABLE = "--FLUTTER_READIUM-last-element-bottom-margin"
 private const val BLACK_AND_WHITE_COMIC_MODE_CSS_VARIABLE = "--FLUTTER_READIUM-black-white-comic-mode"
 
 @OptIn(ExperimentalReadiumApi::class)
@@ -49,6 +50,7 @@ data class FlutterEpubPreferences(
     val disableSynchronization: Boolean? = false,
     val syncPolicy: String? = null,
     val firstElementTopMargin: Int? = null,
+    val lastElementBottomMargin: Int? = null,
     val preventMOColumnBreaks: Boolean? = true,
 ) : Configurable.Preferences<FlutterEpubPreferences> {
     override fun plus(other: FlutterEpubPreferences): FlutterEpubPreferences =
@@ -81,6 +83,7 @@ data class FlutterEpubPreferences(
             disableSynchronization = other.disableSynchronization ?: disableSynchronization,
             syncPolicy = other.syncPolicy ?: syncPolicy,
             firstElementTopMargin = other.firstElementTopMargin ?: firstElementTopMargin,
+            lastElementBottomMargin = other.lastElementBottomMargin ?: lastElementBottomMargin,
             preventMOColumnBreaks = other.preventMOColumnBreaks ?: preventMOColumnBreaks,
         )
 
@@ -116,6 +119,7 @@ data class FlutterEpubPreferences(
     fun toCustomCssVariables(): Map<String, String?> {
         val map = mutableMapOf<String, String?>()
         map[TOP_MARGIN_CSS_VARIABLE] = firstElementTopMargin?.let { "${it}px" }
+        map[BOTTOM_MARGIN_CSS_VARIABLE] = lastElementBottomMargin?.let { "${it}px" }
         map[BLACK_AND_WHITE_COMIC_MODE_CSS_VARIABLE] = if (blackAndWhiteComicMode == true) "1" else null
         return map
     }

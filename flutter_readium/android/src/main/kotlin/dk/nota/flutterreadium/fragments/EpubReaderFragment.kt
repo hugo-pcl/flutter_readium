@@ -22,6 +22,7 @@ import dk.nota.flutterreadium.progression
 import dk.nota.flutterreadium.requireOrLog
 import dk.nota.flutterreadium.withMainContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import org.json.JSONObject
@@ -81,6 +82,8 @@ class EpubReaderFragment :
     val scrollMode: Boolean
         get() = epubNavigator?.settings?.value?.scroll == true
 
+    private var autoAdvanceCooldown = false
+
     val layoutMode: Layout
         get() =
             ReadiumReader.currentPublication
@@ -115,6 +118,39 @@ class EpubReaderFragment :
         )
 
         listener?.onPageChanged(pageIndex, totalPages, locator)
+
+        // Auto-advance: check scroll state on every page change
+        // (same approach as iOS locationDidChange). Only check in scroll
+        // mode when the cooldown is inactive.
+        if (!scrollMode || autoAdvanceCooldown) return
+        lifecycleScope.launch {
+            try {
+                val jsResult = evaluateJavascript("window.__flutterReadiumScrollState()")
+                if (jsResult != null && jsResult != "null") {
+                    val json = JSONObject(jsResult)
+                    when {
+                        json.optBoolean("nearBottom", false) -> {
+                            autoAdvanceCooldown = true
+                            PluginLog.d(TAG, "::onPageChanged - AUTO-ADVANCE forward")
+                            goToNextChapter(true)
+                            delay(3000)
+                            autoAdvanceCooldown = false
+                        }
+                        json.optBoolean("nearTop", false) -> {
+                            autoAdvanceCooldown = true
+                            PluginLog.d(TAG, "::onPageChanged - AUTO-ADVANCE backward")
+                            goToPreviousChapter(true)
+                            delay(3000)
+                            autoAdvanceCooldown = false
+                        }
+                    }
+                } else {
+                    PluginLog.w(TAG, "::onPageChanged - scroll state unavailable (result=$jsResult)")
+                }
+            } catch (e: Exception) {
+                PluginLog.w(TAG, "::onPageChanged - JS eval/parse failed: $e")
+            }
+        }
     }
 
     override fun onPageLoaded() {
@@ -124,6 +160,79 @@ class EpubReaderFragment :
             injectImageTapListeners()
         }
         listener?.onPageLoaded()
+    }
+
+    /**
+     * Jump directly to the first locator of the next reading-order item.
+     *
+     * Auto-advance (see [onPageChanged]) fires when the JS-side scroll listener detects
+     * the viewport is within ~50px of the bottom of the current resource — well short of the
+     * exact `endProgression >= 1.0` gate in [goForwardVertical], which is designed for
+     * incremental "scroll forward by one viewport" swipes, not for jumping straight to the
+     * next chapter. Calling [goForwardVertical] from auto-advance would almost always just
+     * nudge the scroll position within the same chapter instead of leaving it.
+     */
+    private suspend fun goToNextChapter(animated: Boolean) {
+        val locator =
+            requireOrLog(TAG, currentLocator?.value, "No current locator.") ?: return
+
+        val navigator =
+            requireOrLog(TAG, epubNavigator, "Navigator not ready.") ?: return
+
+        val publication =
+            requireOrLog(TAG, ReadiumReader.currentPublication, "No current publication.") ?: return
+
+        val position = readingOrderPositionOrLog(publication, locator) ?: return
+        val nextPosition = position + 1
+        if (nextPosition >= publication.readingOrder.size) {
+            PluginLog.d(TAG, "::goToNextChapter - reached end.")
+            return
+        }
+
+        val nextLink =
+            requireOrLog(TAG, publication.readingOrder.getOrNull(nextPosition), "Reached end.") ?: return
+
+        withMainContext { navigator.go(nextLink, animated) }
+    }
+
+    /**
+     * Jump directly to the last locator of the previous reading-order item.
+     *
+     * Mirrors [goToNextChapter] for the "scrolled near top" auto-advance case (see
+     * [onPageChanged]) -- same rationale, just the backward direction. Positions at
+     * progression 1.0 (end of the previous resource), matching [goBackwardVertical]'s
+     * existing chapter-jump behavior for manual backward navigation.
+     */
+    private suspend fun goToPreviousChapter(animated: Boolean) {
+        val locator =
+            requireOrLog(TAG, currentLocator?.value, "No current locator.") ?: return
+
+        val navigator =
+            requireOrLog(TAG, epubNavigator, "Navigator not ready.") ?: return
+
+        val publication =
+            requireOrLog(TAG, ReadiumReader.currentPublication, "No current publication.") ?: return
+
+        val position = readingOrderPositionOrLog(publication, locator) ?: return
+        val prevPosition = position - 1
+        if (prevPosition < 0) {
+            PluginLog.d(TAG, "::goToPreviousChapter - reached the beginning.")
+            return
+        }
+
+        val prevLink =
+            requireOrLog(TAG, publication.readingOrder.getOrNull(prevPosition), "Reached the beginning.") ?: return
+        val prevLocator =
+            requireOrLog(
+                TAG,
+                publication.locatorFromLink(prevLink)?.copyWithLocations(
+                    progression = 1.0,
+                    totalProgression = null,
+                ),
+                "Failed to make locator from link.",
+            ) ?: return
+
+        withMainContext { navigator.go(prevLocator, animated) }
     }
 
     private suspend fun injectImageTapListeners() {
@@ -439,35 +548,16 @@ class EpubReaderFragment :
             PluginLog.e(TAG, "::goForwardVertical - this is only meant for vertical scroll mode")
         }
 
-        val locator =
-            requireOrLog(TAG, currentLocator?.value, "No current locator.") ?: return
-
-        val navigator =
-            requireOrLog(TAG, epubNavigator, "Navigator not ready.") ?: return
-
         val viewPortSize =
             requireOrLog(TAG, currentViewPortSize(), "Failed to load view port size.") ?: return
-
-        val publication =
-            requireOrLog(TAG, ReadiumReader.currentPublication, "No current publication.") ?: return
 
         val endProgression = viewPortSize.endProgression
         val nextProgression = viewPortSize.nextProgression
 
         if (nextProgression >= 1.0 && endProgression >= 1.0) {
-            val position = readingOrderPositionOrLog(publication, locator) ?: return
-
-            // Attempted to over the end of the current file.
-            val nextPosition = position + 1
-            if (nextPosition >= publication.readingOrder.size) {
-                PluginLog.d(TAG, "::goForwardVertical - reached end.")
-                return
-            }
-
             PluginLog.d(TAG, "::goForwardVertical. load next chapter, progression:$nextProgression")
-            val nextLink =
-                requireOrLog(TAG, publication.readingOrder.getOrNull(nextPosition), "Reached end.") ?: return
-            return withMainContext { navigator.go(nextLink, animated) }
+            goToNextChapter(animated)
+            return
         }
 
         scrollToProgression(nextProgression)
@@ -638,7 +728,7 @@ class EpubReaderFragment :
                             },
                     // Only register the callback if custom selectionActions are added.
                     selectionActionModeCallback =
-                        if (ReadiumReader.selectionActions.isNotEmpty()) {
+                        if (ReadiumReader.selectionActions.isNotEmpty() || ReadiumReader.allowedDefaultActions != null) {
                             createSelectionActionModeCallback()
                         } else {
                             null

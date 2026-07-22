@@ -208,5 +208,37 @@ extension EPUBReaderView {
         }
       })();
       """, injectionTime: .atDocumentEnd, forMainFrameOnly: false))
+
+    /// Auto-advance scroll listener: tracks whether the viewport is scrolled near the
+    /// bottom or top of the current resource, so `navigator(_:locationDidChange:)` can
+    /// decide whether to auto-advance to the next/previous chapter in scroll mode.
+    userScripts.append(WKUserScript(source: """
+      (function() {
+          'use strict';
+          var _nearBottom = false;
+          var _nearTop = false;
+          var _thresholdPx = 50;
+          function updateScrollState() {
+              var st = window.scrollY || window.pageYOffset || document.documentElement.scrollTop || 0;
+              var maxScroll = Math.max(1, document.documentElement.scrollHeight - document.documentElement.clientHeight);
+              _nearBottom = (st >= maxScroll - _thresholdPx);
+              _nearTop = (_thresholdPx >= st);
+          }
+          window.addEventListener('scroll', updateScrollState, { passive: true });
+          // Seed the state immediately — a resource that opens already scrolled to an
+          // edge (e.g. landing at the end of a chapter) would otherwise report neither
+          // nearBottom nor nearTop until the next user-driven scroll event.
+          updateScrollState();
+          window.__flutterReadiumScrollState = function() {
+              return {
+                  nearBottom: _nearBottom,
+                  nearTop: _nearTop,
+                  scrollTop: window.scrollY || window.pageYOffset || 0,
+                  scrollHeight: document.documentElement.scrollHeight,
+                  clientHeight: document.documentElement.clientHeight
+              };
+          };
+      })();
+      """, injectionTime: .atDocumentEnd, forMainFrameOnly: false))
   }
 }

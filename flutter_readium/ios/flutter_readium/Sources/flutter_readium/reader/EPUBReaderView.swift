@@ -64,6 +64,25 @@ public class EPUBReaderView: NSObject, FlutterPlatformView, ReadiumReaderView, E
 
   var publicationIdentifier: String?
 
+  /// Guards against re-triggering auto-advance while a chapter transition is in flight.
+  /// Only ever read/written from within `autoAdvanceTask`'s `MainActor.run` blocks below —
+  /// this property is not itself actor-isolated, so touching it anywhere else would race.
+  var autoAdvanceCooldown = false
+
+  /// The in-flight auto-advance evaluation, if any. `locationDidChange` can fire many times
+  /// per second during momentum scroll; without cancelling the previous task, overlapping
+  /// evaluations of `__flutterReadiumScrollState()` could race on `autoAdvanceCooldown`.
+  var autoAdvanceTask: Task<Void, Never>?
+
+  /// Direction of the most recent auto-advance ("forward"/"backward"), and until when the
+  /// *opposite* signal (`nearTop` after a forward advance, `nearBottom` after a backward one)
+  /// should be ignored. Without this, landing at the edge of the destination chapter looks
+  /// identical to genuinely reaching the edge of a short chapter, so a forward advance followed
+  /// by an immediate backward advance (and vice versa) loops forever between the same two
+  /// chapters. Only read/written from `autoAdvanceTask`'s `MainActor.run` blocks below.
+  var lastAutoAdvanceDirection: String? = nil
+  var directionLockUntil: Date? = nil
+
   public func view() -> UIView {
     Log.reader.debug("getView")
     return containerView
@@ -374,6 +393,73 @@ public class EPUBReaderView: NSObject, FlutterPlatformView, ReadiumReaderView, E
       }
     }
     emitOnPageChanged(locator: locator)
+
+    // Auto-advance: in scroll mode, when progression near the end/start of the current
+    // resource, go to the next/previous chapter. Cancel any still-running evaluation from
+    // a previous locationDidChange first — momentum scrolling can fire this many times per
+    // second.
+    autoAdvanceTask?.cancel()
+    autoAdvanceTask = Task { [weak self] in
+      guard let self = self else { return }
+
+      // Evaluate the scroll state from JS
+      let jsResult = await self.evaluateJavascript("JSON.stringify(window.__flutterReadiumScrollState())")
+      guard !Task.isCancelled else { return }
+      guard case .success(let result) = jsResult,
+            let jsonStr = result as? String,
+            let data = jsonStr.data(using: .utf8),
+            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        return
+      }
+      var nearBottom = json["nearBottom"] as? Bool == true
+      var nearTop = json["nearTop"] as? Bool == true
+
+      // Direction lock: suppress the opposite direction's signal for a few seconds after an
+      // auto-advance, so we don't immediately bounce back to the chapter we just left.
+      let (lockedDirection, lockActive) = await MainActor.run { () -> (String?, Bool) in
+        let active = self.directionLockUntil.map { $0 > Date() } ?? false
+        return (self.lastAutoAdvanceDirection, active)
+      }
+      if lockActive {
+        if lockedDirection == "forward" { nearTop = false }
+        if lockedDirection == "backward" { nearBottom = false }
+      }
+      guard nearBottom || nearTop else { return }
+
+      let presentationScroll = await MainActor.run { self.readiumViewController.presentation.scroll }
+      guard presentationScroll, !Task.isCancelled else { return }
+
+      // Atomic test-and-set on MainActor so two overlapping tasks can't both pass the
+      // cooldown check and both trigger a chapter advance.
+      let wasAlreadyCoolingDown = await MainActor.run { () -> Bool in
+        if self.autoAdvanceCooldown { return true }
+        self.autoAdvanceCooldown = true
+        return false
+      }
+      guard !wasAlreadyCoolingDown else { return }
+
+      let options = NavigatorGoOptions(animated: true)
+      // Jump straight to the next/previous chapter instead of goForward/BackwardInScrollMode:
+      // auto-advance fires when the viewport is merely near (not exactly at) the edge of the
+      // resource, so it can't rely on those functions' endProgression/progression gates.
+      if nearBottom {
+        Log.reader.debug("AUTO-ADVANCE to next chapter")
+        _ = await self.goToNextChapter(options: options)
+        await MainActor.run {
+          self.lastAutoAdvanceDirection = "forward"
+          self.directionLockUntil = Date().addingTimeInterval(5)
+        }
+      } else {
+        Log.reader.debug("AUTO-ADVANCE to previous chapter")
+        _ = await self.goToPreviousChapter(options: options)
+        await MainActor.run {
+          self.lastAutoAdvanceDirection = "backward"
+          self.directionLockUntil = Date().addingTimeInterval(5)
+        }
+      }
+      try? await Task.sleep(nanoseconds: 3_000_000_000)
+      await MainActor.run { self.autoAdvanceCooldown = false }
+    }
   }
 
   public func navigator(_ navigator: Navigator, presentExternalURL url: URL) {

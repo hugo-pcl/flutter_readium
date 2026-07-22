@@ -18,6 +18,10 @@ body > *:first-child {
   margin-top: var(--FLUTTER_READIUM-first-element-top-margin) !important;
 }
 
+body > *:last-child {
+  margin-bottom: var(--FLUTTER_READIUM-last-element-bottom-margin) !important;
+}
+
 //TODO: Temporary fix for https://github.com/readium/readium-css/issues/129#issue-1856586505
 //remove when resolved
 * {
