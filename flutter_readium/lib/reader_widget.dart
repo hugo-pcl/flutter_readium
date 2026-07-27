@@ -40,7 +40,9 @@ class ReadiumReaderWidget extends StatefulWidget {
   final Publication publication;
 
   /// Optional widget to show while the reader is loading, e.g. a spinner.
-  /// It will be shown until the reader sends its first onPageChanged event.
+  /// It will be shown until the reader sends its first onPageChanged event, or reports
+  /// [ReadiumReaderStatus.ready] — whichever comes first. Fixed-layout EPUBs only produce the
+  /// latter on Android, since kotlin-toolkit reports page changes for reflowable resources only.
   /// It should typically be a full-screen widget, since it will be stacked on top of the reader widget.
   final Widget? loadingWidget;
 
@@ -115,11 +117,14 @@ class _ReadiumReaderWidgetState extends State<ReadiumReaderWidget> implements Re
   static const _wakelockTimerDuration = Duration(minutes: 30);
 
   Timer? _wakelockTimer;
+  StreamSubscription<ReadiumReaderStatus>? _readerStatusSub;
   ReadiumReaderChannel? _channel;
   bool wasDestroyed = false;
   bool isReady = false;
 
-  final _isReadyCompleter = Completer<Locator>();
+  /// Completes with the locator the reader became ready at, or `null` when readiness was signalled
+  /// without one (fixed layout, see [_markReady]).
+  final _isReadyCompleter = Completer<Locator?>();
 
   final _readium = FlutterReadiumPlatform.instance;
 
@@ -143,12 +148,24 @@ class _ReadiumReaderWidgetState extends State<ReadiumReaderWidget> implements Re
     _enableWakelock();
     _setCurrentWidgetInterface();
     _scrollMode = _defaultPreferences?.scroll ?? false;
+
+    // Fallback readiness signal: some navigators report themselves ready without ever sending
+    // a page change (fixed-layout EPUBs on Android, where kotlin-toolkit's PaginationListener
+    // is wired to the reflowable web view only). Without this the loading overlay would never
+    // be removed, even though the publication is rendered and navigable.
+    _readerStatusSub = _readium.onReaderStatusChanged.listen((final status) {
+      if (status.isReady) {
+        _markReady();
+      }
+    });
   }
 
   @override
   void dispose() {
     _log.d('ReadiumReaderWidget dispose');
     _cleanup();
+    _readerStatusSub?.cancel();
+    _readerStatusSub = null;
     _channel?.dispose();
     _channel = null;
     _lastOrientation = null;
@@ -383,19 +400,29 @@ class _ReadiumReaderWidgetState extends State<ReadiumReaderWidget> implements Re
 
   Locator? _currentLocator;
 
+  /// Flip the reader to its ready state, removing [ReadiumReaderWidget.loadingWidget]. Idempotent,
+  /// since the readiness signals it is called from are not mutually exclusive.
+  void _markReady() {
+    if (isReady || !mounted) {
+      return;
+    }
+
+    setState(() {
+      isReady = true;
+    });
+
+    if (!_isReadyCompleter.isCompleted) {
+      _isReadyCompleter.complete(_currentLocator);
+    }
+  }
+
   void _onPlatformViewCreated(final int id) {
     _channel = ReadiumReaderChannel(
       '$_viewType:$id',
       onPageChanged: (final locator) {
         _log.d(() => 'onPageChanged: ${locator.toJson()}');
         _currentLocator = locator;
-
-        if (isReady == false) {
-          setState(() {
-            isReady = true;
-          });
-          _isReadyCompleter.complete(locator);
-        }
+        _markReady();
       },
       onTextSelected: widget.onTextSelected,
       onSelectionAction: widget.onSelectionAction,

@@ -30,6 +30,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 import org.readium.r2.shared.ExperimentalReadiumApi
+import org.readium.r2.shared.publication.Layout
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.util.AbsoluteUrl
 
@@ -225,6 +226,18 @@ class ReadiumReaderWidget(
     // Mirror those into the text-locator stream once so Flutter can observe progress.
     private var lastVisualLocationKey: String? = null
 
+    /**
+     * True for fixed-layout EPUBs, which kotlin-toolkit never reports page changes for:
+     * `EpubNavigatorFragment.notifyCurrentLocation` only calls its `PaginationListener` behind
+     * `reflowableWebView?.let { … }`, and that web view is null in fixed layout. PDF and comic
+     * (CBZ/DiViNa) navigators emit page changes themselves, so they are excluded here.
+     */
+    private val isFixedLayoutEpub: Boolean
+        get() =
+            !ReadiumReader.isPdf &&
+                !ReadiumReader.isComic &&
+                ReadiumReader.currentPublication?.metadata?.layout == Layout.FIXED
+
     override fun onPageChanged(
         pageIndex: Int,
         totalPages: Int,
@@ -276,6 +289,18 @@ class ReadiumReaderWidget(
         lastVisualLocationKey = currentKey
         ReadiumReader.emitTextLocatorUpdate(locator)
         PluginLog.d(TAG, "::onVisualCurrentLocationChanged emitted text locator update")
+
+        // In fixed layout no page-changed callback ever arrives, so the widget-level
+        // `onPageChanged` contract - which the Dart side uses to drop its loading overlay and to
+        // track the current page for orientation realignment - would never be honoured. Visual
+        // location changes are the equivalent signal there, so mirror them onto the channel.
+        // Emit the raw locator rather than going through `emitOnPageChanged`: there is no
+        // reflowable web view to query page information from, and fabricating a page
+        // index/count would pollute the client's pagination. Already deduplicated above.
+        if (isFixedLayoutEpub) {
+            channel.onPageChanged(locator)
+            PluginLog.d(TAG, "::onVisualCurrentLocationChanged emitted fixed-layout page change")
+        }
     }
 
     override fun onVisualReaderIsReady() {

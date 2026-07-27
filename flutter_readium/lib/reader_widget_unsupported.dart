@@ -4,7 +4,7 @@ import 'flutter_readium.dart';
 class ReadiumReaderWidget extends StatelessWidget {
   const ReadiumReaderWidget({
     required this.publication,
-    this.loadingWidget = const Center(child: CircularProgressIndicator()),
+    this.loadingWidget,
     this.initialLocator,
     this.shouldShowControls,
     this.onExternalLinkActivated,
@@ -23,7 +23,7 @@ class ReadiumReaderWidget extends StatelessWidget {
   });
 
   final Publication publication;
-  final Widget loadingWidget;
+  final Widget? loadingWidget;
   final Locator? initialLocator;
   final ValueNotifier<bool>? shouldShowControls;
   final Function(String)? onExternalLinkActivated;

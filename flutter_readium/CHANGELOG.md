@@ -32,6 +32,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   fired and custom selection actions never appeared, with nothing logged. `selectionActions` is now
   read from the creation params — as iOS already did — so it is known before the navigator fragment
   is built, instead of relying on the later `configureSelectionActions` call.
+- **`loadingWidget` never dismissed for fixed-layout EPUBs (Android)** — comics, BD and other
+  pre-paginated publications left the loading overlay stacked on top of a fully rendered, navigable
+  book. kotlin-toolkit's `EpubNavigatorFragment` only notifies its `PaginationListener` behind
+  `reflowableWebView?.let { … }`, so the widget-level `onPageChanged` that `ReadiumReaderWidget`
+  waits on never arrived in fixed layout. The first visual location change now stands in for it.
+  This also un-blocks the orientation-change page realignment, which was gated on the same signal.
+- **`ReadiumReaderWidget` readiness no longer depends on a single native signal** — the widget also
+  clears its loading overlay when the reader reports `ReadiumReaderStatus.ready`, whichever arrives
+  first.
+
+### Changed
+
+- **`ReadiumReaderWidget.loadingWidget` is now nullable on web and unsupported platforms**, matching
+  the mobile implementation. Passing `null` shows no overlay; previously these two variants
+  substituted a `CircularProgressIndicator` default (which neither of them ever rendered).
 
 ### Documentation
 
