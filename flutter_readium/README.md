@@ -39,7 +39,7 @@ flutter_readium is a federated Flutter plugin that delegates to the upstream Rea
 | Audiobook |      —       |  —  |   ✓   |           -            |
 | PDF       |      ✓       |  —  |   —   |           -            |
 
-CBZ, DIVINA, and LCP-protected publications are not currently supported. The underlying toolkits include an LCP adapter; it may be enabled in a future release.
+CBZ and DIVINA publications are not currently supported. LCP-protected publications are supported by the underlying toolkits but are **disabled by default** in this plugin — see [LCP (DRM) support](#lcp-drm-support).
 
 ## Platform support
 
@@ -60,6 +60,59 @@ CBZ, DIVINA, and LCP-protected publications are not currently supported. The und
 ¹ Web TTS uses the browser's Web Speech API — voice availability and quality vary by browser.
 
 > **macOS note:** Native macOS desktop (`flutter run -d macos`) is not supported — a no-op stub is registered so the Flutter macOS target still compiles, but every reader call returns `MethodNotImplemented`. The upstream `swift-toolkit` is iOS-only and has marked native macOS [`not_planned`](https://github.com/readium/swift-toolkit/issues/783). The iOS build runs fine on Apple Silicon Macs via "Designed for iPad".
+
+## LCP (DRM) support
+
+[Readium LCP](https://readium.org/lcp/) (Licensed Content Protection) is the Readium Foundation's
+open DRM solution. LCP-protected EPUBs ship as `.epub` (or `.lcpl` license files) whose content is
+encrypted; a valid **User Passphrase** decrypts them on the reader.
+
+This plugin ships with the necessary **native scaffolding already present but disabled by default**.
+The upstream `swift-toolkit` and `kotlin-toolkit` LCP modules are vendored into the platform builds,
+but no LCP client/auth is wired up, so DRM-protected books cannot be opened yet.
+
+### How LCP fits the toolkits
+
+| Layer | iOS (swift-toolkit) | Android (kotlin-toolkit) |
+| ----- | ------------------- | ------------------------ |
+| Service | `LCPService` (`Sources/LCP/LCPService.swift`) | `LcpService` (`readium/lcp/.../LcpService.kt`) |
+| Auth | `LCPDialogAuthentication` / `LCPPassphraseAuthentication` / custom `LCPAuthenticating` | `LcpPassphraseAuthentication` / custom `LcpAuthenticating` |
+| Client (decryption) | Your app wraps the private `R2LCPClient.framework` in a `LCPClient` facade | Implement the `LcpClient` decryption facade |
+| Repositories | `LCPLicenseRepository` (e.g. SQLite adapter) + `LCPPassphraseRepository` | `LicensesRepository` + `PassphrasesRepository` |
+| Content protection | `contentProtection(with:)` → passed to `PublicationOpener` | `LcpContentProtection` → added to the opener's `contentProtections` |
+
+On both platforms the flow is the same: when a publication is LCP-protected, the toolkit's
+content protection asks its **authenticator** for a passphrase, validates it against the license,
+then transparently decrypts the assets.
+
+### Current state in this fork
+
+- **iOS** (`flutter_readium/ios/flutter_readium/Sources/flutter_readium/Readium.swift`) — a full LCP
+  block already exists behind `#if LCP`, creating `LCPService` with SQLite license/passphrase
+  repositories and a private `R2LCPClient` facade. It is **compiled out** because the `LCP` flag is
+  undefined, the `ReadiumLCP` / `ReadiumAdapterLCPSQLite` pods are commented out in
+  `flutter_readium.podspec`, and `R2LCPClient.framework` is not linked.
+- **Android** (`flutter_readium/android/build.gradle`) — the `readium-lcp` module dependency is
+  commented out and there is no `Lcp` wiring in `ReadiumReader.kt`. Any `ContentProtection` list the
+  `PublicationOpener` is built with today is empty.
+
+### Enabling LCP
+
+Enabling DRM support requires changes on every native side plus a Dart API to supply the passphrase.
+This is intentionally left disabled in the stock plugin (LCP needs a licensed `R2LCPClient`/`liblcp`
+binary and product decisions about passphrase UX). Enabling involves:
+
+1. **iOS** — uncomment the `ReadiumLCP`/`ReadiumAdapterLCPSQLite` pods in `flutter_readium.podspec`,
+   link the private `R2LCPClient.framework`, and define the `LCP` preprocessor flag so the
+   `#if LCP` block in `Readium.swift` compiles.
+2. **Android** — uncomment `org.readium.kotlin-toolkit:readium-lcp` in `android/build.gradle` and
+   register `LcpContentProtection` (with a license/passphrase repository and an `LcpAuthenticating`
+   implementation) in the `PublicationOpener` in `ReadiumReader.kt`.
+3. **Dart** — add a method-channel API on `FlutterReadium` so the app can pass a passphrase back to
+   the native authenticator (e.g. a `LCPDialogAuthentication` that hands off to Dart instead of
+   prompting natively).
+4. **App integration** — the consuming app (YouScribe) must obtain the passphrase from its own
+   backend/LSD proxy and forward it through the plugin.
 
 ## Minimum requirements
 
