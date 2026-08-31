@@ -515,7 +515,7 @@ suspend fun Publication.getGuidedNavigationMediaOverlays(): List<FlutterMediaOve
  * If there are no media overlays, returns the original publication and null.
  * Guided navigation is preferred over syncnarr media overlays when both are present.
  */
-@OptIn(InternalReadiumApi::class)
+@OptIn(InternalReadiumApi::class, kotlin.time.ExperimentalTime::class)
 suspend fun Publication.makeSyncAudiobook(): Pair<Publication, List<FlutterMediaOverlay?>?> {
     if (!hasSyncNarration()) {
         return Pair(this, null)
